@@ -1,4 +1,12 @@
 <?php
+if (!isset($root)) {
+  $root = '../../';
+}
+if (!class_exists('iCompactador')) {
+  require_once($root . "librerias/iCompactador/iCompactador.class.php");
+}
+
+
 
 $treat = false;
 if (isset($_POST['src'])) {
@@ -9,15 +17,14 @@ if (isset($_POST['src'])) {
   $fast_decode = isset($_POST['fast_decode']) && $_POST['fast_decode'];
   $special_char = isset($_POST['special_char'])&& $_POST['special_char'];
   
-  require 'iCompactador.class.php';
   $t1 = microtime(true);
-  $packer = new JavaScriptPacker($script, $encoding, $fast_decode, $special_char);
-  $packed = $packer->pack();
+  $ic = new iCompactador($script, $encoding, $fast_decode, $special_char);
+  $compactado = $ic->Compactar();
   $t2 = microtime(true);
   
   $originalLength = strlen($script);
-  $packedLength = strlen($packed);
-  $ratio =  number_format($packedLength / $originalLength, 3);
+  $compactadoLength = strlen($compactado);
+  $ratio =  number_format($compactadoLength / $originalLength, 3);
   $time = sprintf('%.4f', ($t2 - $t1) );
   
   $treat = true;
@@ -27,7 +34,7 @@ if (isset($_POST['src'])) {
           "http://www.w3.org/TR/html4/strict.dtd">
 <html>
 <head>
-<title>JavaScript Packer in PHP</title>
+<title> iCompactador - Insside Framewok®</title>
 <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
 <style type="text/css">
 .result {
@@ -75,10 +82,10 @@ function decode() {
   <?php if ($treat) {?>
   <div id="result">
     <h3>packed result:</h3>
-    <textarea id="packed" class="result" rows="10" cols="80" readonly="readonly"><?php echo htmlspecialchars($packed);?></textarea>
+    <textarea id="packed" class="result" rows="10" cols="80" readonly="readonly"><?php echo htmlspecialchars($compactado);?></textarea>
     <p>
       compression ratio:
-      <?php echo $originalLength, '/', $packedLength, ' = ',$ratio; ?>
+      <?php echo $originalLength, '/', $compactadoLength, ' = ',$ratio; ?>
       <br>performed in <?php echo $time; ?> s.
     </p>
     <p><button type="button" onclick="decode()">decode</button></p>

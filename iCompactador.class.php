@@ -37,7 +37,7 @@ class iCompactador {
     $this->especiales = $especiales;
   }
 
-  public function pack() {
+  public function Compactar() {
     $this->set_Analizador('Compresion');
     if ($this->especiales) {
       $this->set_Analizador('_encodeSpecialChars');
@@ -61,7 +61,7 @@ class iCompactador {
     for ($i = 0; isset($this->analizadores[$i]); $i++) {
       $codigo = call_user_func(array(&$this, $this->analizadores[$i]), $codigo);
     }
-    return($script);
+    return($codigo);
   }
 
   /**
@@ -269,7 +269,7 @@ class iCompactador {
     }
     // pack the boot function too
     $unpackPacker = new iCompactador($unpack, 0, false, true);
-    $unpack = $unpackPacker->pack();
+    $unpack = $unpackPacker->Compactar();
 
     // arguments
     $params = array($packed, $ascii, $count, $keywords);
@@ -293,8 +293,7 @@ class iCompactador {
 
   // mmm.. ..which one do i need ??
   private function _getEncoder($ascii) {
-    return $ascii > 10 ? $ascii > 36 ? $ascii > 62 ?
-                            '_encode95' : '_encode62' : '_encode36' : '_encode10';
+    return $ascii > 10 ? $ascii > 36 ? $ascii > 62 ? '_encode95' : '_encode62' : '_encode36' : '_encode10';
   }
 
   // zero encoding
