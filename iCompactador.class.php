@@ -2,8 +2,13 @@
 if(!isset($root)){$root='../../';}
 if(!class_exists('iAnalisis')){require_once($root."librerias/iCompactador/iAnalisis.class.php");}
 
-
+/**
+ * 
+ */
 class iCompactador {
+  /**
+   * $analizadores: listado de funciones de análisis, que van a ser ejecutadas.
+   */
 
   /** Constantes & Parametros * */
   const ignorar = '$1';
@@ -12,6 +17,9 @@ class iCompactador {
   private $rapida = true;
   private $especiales = false;
   private $codificaciones = array('None' => 0, 'Numeric' => 10, 'Normal' => 62, 'High ASCII' => 95);
+  private $analizadores = array();
+  private $conteo = array();
+  private $regulador;
 
   public function __construct($codigo, $codificacion = 62, $rapida = true, $especiales = false) {
     $this->codigo = $codigo . "\n";
@@ -24,7 +32,7 @@ class iCompactador {
   }
 
   public function pack() {
-    $this->_addParser('_basicCompression');
+    $this->_addParser('Compresion');
     if ($this->especiales) {
       $this->_addParser('_encodeSpecialChars');
     }
@@ -40,48 +48,42 @@ class iCompactador {
    * @return type
    */
   private function Analisis($codigo) {
-    for ($i = 0; isset($this->_analizadors[$i]); $i++) {
-      $codigo = call_user_func(array(&$this, $this->_analizadors[$i]), $codigo);
+    for ($i = 0; isset($this->analizadores[$i]); $i++) {
+      $codigo = call_user_func(array(&$this, $this->analizadores[$i]), $codigo);
     }
     return($script);
   }
 
-  // keep a list of parsing functions, they'll be executed all at once
-  private $_analizadors = array();
+
 
   private function _addParser($analizador) {
-    $this->_analizadors[] = $analizador;
+    $this->analizadores[] = $analizador;
   }
 
-  // zero encoding - just removal of white space and comments
-  private function _basicCompression($script) {
+  /**
+   * Este metodo aplica los patrones de analisis iniciales eliminando espacios en blanco y comentarios,
+   * presentes en el código fuente ingresado.
+   * @param type $codigo: Corresponde al codigo fuente original ingresado en formato JavaScript.
+   * @return type String: Retorna el codigo fuente comprimido.
+   */
+  private function Compresion($codigo) {
     $analizador = new iAnalisis();
-    // make safe
     $analizador->escapeChar = '\\';
-    // protect strings
-    $analizador->add('/\'[^\'\\n\\r]*\'/', self::ignorar);
-    $analizador->add('/"[^"\\n\\r]*"/', self::ignorar);
-    // remove comments
-    $analizador->add('/\\/\\/[^\\n\\r]*[\\n\\r]/', ' ');
-    $analizador->add('/\\/\\*[^*]*\\*+([^\\/][^*]*\\*+)*\\//', ' ');
-    // protect regular expressions
+    $analizador->add('/\'[^\'\\n\\r]*\'/', self::ignorar);// Protege las cadenas
+    $analizador->add('/"[^"\\n\\r]*"/', self::ignorar);// Protege las cadenas
+    $analizador->add('/\\/\\/[^\\n\\r]*[\\n\\r]/', ' ');    // Remueve los comentarios
+    $analizador->add('/\\/\\*[^*]*\\*+([^\\/][^*]*\\*+)*\\//', ' ');// Protege las expresiones regulares
     $analizador->add('/\\s+(\\/[^\\/\\n\\r\\*][^\\/\\n\\r]*\\/g?i?)/', '$2'); // ignorar
-    $analizador->add('/[^\\w\\x24\\/\'"*)\\?:]\\/[^\\/\\n\\r\\*][^\\/\\n\\r]*\\/g?i?/', self::ignorar);
-    // remove: ;;; doSomething();
-    if ($this->especiales)
-      $analizador->add('/;;;[^\\n\\r]+[\\n\\r]/');
-    // remove redundant semi-colons
-    $analizador->add('/\\(;;\\)/', self::ignorar); // protect for (;;) loops
+    $analizador->add('/[^\\w\\x24\\/\'"*)\\?:]\\/[^\\/\\n\\r\\*][^\\/\\n\\r]*\\/g?i?/', self::ignorar); // remove: ;;; doSomething();
+    if ($this->especiales){$analizador->add('/;;;[^\\n\\r]+[\\n\\r]/');}// Remueve los punto y coma redundantes.
+    $analizador->add('/\\(;;\\)/', self::ignorar); // Protege las repeticiones en los for (;;) 
     $analizador->add('/;+\\s*([};])/', '$2');
-    // apply the above
-    $script = $analizador->exec($script);
-
-    // remove white-space
-    $analizador->add('/(\\b|\\x24)\\s+(\\b|\\x24)/', '$2 $3');
+    $analisis['primario']= $analizador->exec($codigo);//Aplica todo lo anterior
+    $analizador->add('/(\\b|\\x24)\\s+(\\b|\\x24)/', '$2 $3');// remove white-space
     $analizador->add('/([+\\-])\\s+([+\\-])/', '$2 $3');
     $analizador->add('/\\s+/', '');
-    // done
-    return $analizador->exec($script);
+    $analisis['secundario']=$analizador->exec($analisis['primario']);
+    return($analisis['secundario']);
   }
 
   private function _encodeSpecialChars($script) {
@@ -146,15 +148,15 @@ class iCompactador {
       $unsorted = array(); // same list, not sorted
       $protected = array(); // "protected" words (dictionary of word->"word")
       $value = array(); // dictionary of charCode->encoding (eg. 256->ff)
-      $this->_count = array(); // word->count
+      $this->conteo = array(); // word->count
       $i = count($all);
       $j = 0; //$word = null;
       // count the occurrences - used for sorting later
       do {
         --$i;
         $word = '$' . $all[$i];
-        if (!isset($this->_count[$word])) {
-          $this->_count[$word] = 0;
+        if (!isset($this->conteo[$word])) {
+          $this->conteo[$word] = 0;
           $unsorted[$j] = $word;
           // make a dictionary of all of the protected words in this script
           //  these are words that might be mistaken for encoding
@@ -163,7 +165,7 @@ class iCompactador {
           $protected['$' . $values[$j]] = $j++;
         }
         // increment the word counter
-        $this->_count[$word] ++;
+        $this->conteo[$word] ++;
       } while ($i > 0);
       // prepare to sort the word list, first we must protect
       //  words that are also used as codes. we assign them a code
@@ -177,7 +179,7 @@ class iCompactador {
         if (isset($protected[$word]) /* != null */) {
           $_sorted[$protected[$word]] = substr($word, 1);
           $_protected[$protected[$word]] = true;
-          $this->_count[$word] = 0;
+          $this->conteo[$word] = 0;
         }
       } while ($i);
 
@@ -207,10 +209,10 @@ class iCompactador {
         'protected' => $_protected);
   }
 
-  private $_count = array();
+
 
   private function _sortWords($match1, $match2) {
-    return $this->_count[$match2] - $this->_count[$match1];
+    return $this->conteo[$match2] - $this->conteo[$match1];
   }
 
   // build the boot function used for loading and decoding
@@ -261,7 +263,7 @@ class iCompactador {
     $unpack = $this->_getJSFunction('_unpack');
     if ($this->rapida) {
       // insert the decoder
-      $this->buffer = $decode;
+      $this->regulador = $decode;
       $unpack = preg_replace_callback('/\\{/', array(&$this, '_insertFastDecode'), $unpack, 1);
     }
     $unpack = preg_replace('/"/', "'", $unpack);
@@ -271,7 +273,7 @@ class iCompactador {
     }
     if ($ascii > 36 || $this->codificacion > 62 || $this->rapida) {
       // insert the encode function
-      $this->buffer = $encode;
+      $this->regulador = $encode;
       $unpack = preg_replace_callback('/\\{/', array(&$this, '_insertFastEncode'), $unpack, 1);
     } else {
       // perform the encoding inline
@@ -293,14 +295,14 @@ class iCompactador {
     return 'eval(' . $unpack . '(' . $params . "))\n";
   }
 
-  private $buffer;
+ 
 
   private function _insertFastDecode($match) {
-    return '{' . $this->buffer . ';';
+    return '{' . $this->regulador . ';';
   }
 
   private function _insertFastEncode($match) {
-    return '{$encode=' . $this->buffer . ';';
+    return '{$encode=' . $this->regulador . ';';
   }
 
   // mmm.. ..which one do i need ??
