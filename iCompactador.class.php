@@ -1,6 +1,11 @@
 <?php
-if(!isset($root)){$root='../../';}
-if(!class_exists('iAnalisis')){require_once($root."librerias/iCompactador/iAnalisis.class.php");}
+
+if (!isset($root)) {
+  $root = '../../';
+}
+if (!class_exists('iAnalisis')) {
+  require_once($root . "librerias/iCompactador/iAnalisis.class.php");
+}
 
 /**
  * 
@@ -12,6 +17,7 @@ class iCompactador {
 
   /** Constantes & Parametros * */
   const ignorar = '$1';
+
   private $codigo = '';
   private $codificacion = 62;
   private $rapida = true;
@@ -32,14 +38,18 @@ class iCompactador {
   }
 
   public function pack() {
-    $this->_addParser('Compresion');
+    $this->set_Analizador('Compresion');
     if ($this->especiales) {
-      $this->_addParser('_encodeSpecialChars');
+      $this->set_Analizador('_encodeSpecialChars');
     }
     if ($this->codificacion) {
-      $this->_addParser('_encodeKeywords');
+      $this->set_Analizador('_encodeKeywords');
     }
     return($this->Analisis($this->codigo));
+  }
+
+  private function set_Analizador($analizador) {
+    $this->analizadores[] = $analizador;
   }
 
   /**
@@ -54,10 +64,62 @@ class iCompactador {
     return($script);
   }
 
-
-
-  private function _addParser($analizador) {
-    $this->analizadores[] = $analizador;
+  /**
+   * Analiza todas las expresiones y palabras en el código.
+   * $_sorted: Lista de palabras ordenadas según la frecuencia.
+   * $_encoded: Diccionario de palabra-> Codificación
+   * $_protected: Instancias de palabras "protegidas
+   * $all: Simula el JavaScript total: 
+   * $unsorted: Misma lista, Sin ordenar
+   * $value: Diccionario de codigos de caracteres (eg. 256->ff)
+   * @param type $script
+   * @param type $regexp
+   * @param type $encode
+   * @return type
+   */
+  private function Analizar($script, $regexp, $encode) {
+    $all = array();
+    preg_match_all($regexp, $script, $all);
+    $_sorted = array();
+    $_encoded = array();
+    $_protected = array();
+    $all = $all[0];
+    if (!empty($all)) {
+      $unsorted = array();
+      $protected = array();
+      $value = array();
+      $this->conteo = array();
+      $i = count($all);
+      $j = 0;
+      do {
+        --$i;
+        $word = '$' . $all[$i];
+        if (!isset($this->conteo[$word])) {
+          $this->conteo[$word] = 0;
+          $unsorted[$j] = $word;
+          $values[$j] = call_user_func(array(&$this, $encode), $j);
+          $protected['$' . $values[$j]] = $j++;
+        }
+        $this->conteo[$word] ++;
+      } while ($i > 0);
+      $i = count($unsorted);
+      do {
+        $word = $unsorted[--$i];
+        if (isset($protected[$word]) /* != null */) {
+          $_sorted[$protected[$word]] = substr($word, 1);
+          $_protected[$protected[$word]] = true;
+          $this->conteo[$word] = 0;
+        }
+      } while ($i);
+      usort($unsorted, array(&$this, '_sortWords'));
+      $j = 0;
+      do {
+        if (!isset($_sorted[$i]))
+          $_sorted[$i] = substr($unsorted[$j++], 1);
+        $_encoded[$_sorted[$i]] = $values[$i];
+      } while (++$i < count($unsorted));
+    }
+    return(array('sorted' => $_sorted, 'encoded' => $_encoded, 'protected' => $_protected));
   }
 
   /**
@@ -69,20 +131,22 @@ class iCompactador {
   private function Compresion($codigo) {
     $analizador = new iAnalisis();
     $analizador->escapeChar = '\\';
-    $analizador->add('/\'[^\'\\n\\r]*\'/', self::ignorar);// Protege las cadenas
-    $analizador->add('/"[^"\\n\\r]*"/', self::ignorar);// Protege las cadenas
+    $analizador->add('/\'[^\'\\n\\r]*\'/', self::ignorar); // Protege las cadenas
+    $analizador->add('/"[^"\\n\\r]*"/', self::ignorar); // Protege las cadenas
     $analizador->add('/\\/\\/[^\\n\\r]*[\\n\\r]/', ' ');    // Remueve los comentarios
-    $analizador->add('/\\/\\*[^*]*\\*+([^\\/][^*]*\\*+)*\\//', ' ');// Protege las expresiones regulares
+    $analizador->add('/\\/\\*[^*]*\\*+([^\\/][^*]*\\*+)*\\//', ' '); // Protege las expresiones regulares
     $analizador->add('/\\s+(\\/[^\\/\\n\\r\\*][^\\/\\n\\r]*\\/g?i?)/', '$2'); // ignorar
     $analizador->add('/[^\\w\\x24\\/\'"*)\\?:]\\/[^\\/\\n\\r\\*][^\\/\\n\\r]*\\/g?i?/', self::ignorar); // remove: ;;; doSomething();
-    if ($this->especiales){$analizador->add('/;;;[^\\n\\r]+[\\n\\r]/');}// Remueve los punto y coma redundantes.
+    if ($this->especiales) {
+      $analizador->add('/;;;[^\\n\\r]+[\\n\\r]/');
+    }// Remueve los punto y coma redundantes.
     $analizador->add('/\\(;;\\)/', self::ignorar); // Protege las repeticiones en los for (;;) 
     $analizador->add('/;+\\s*([};])/', '$2');
-    $analisis['primario']= $analizador->exec($codigo);//Aplica todo lo anterior
-    $analizador->add('/(\\b|\\x24)\\s+(\\b|\\x24)/', '$2 $3');// remove white-space
+    $analisis['primario'] = $analizador->exec($codigo); //Aplica todo lo anterior
+    $analizador->add('/(\\b|\\x24)\\s+(\\b|\\x24)/', '$2 $3'); // remove white-space
     $analizador->add('/([+\\-])\\s+([+\\-])/', '$2 $3');
     $analizador->add('/\\s+/', '');
-    $analisis['secundario']=$analizador->exec($analisis['primario']);
+    $analisis['secundario'] = $analizador->exec($analisis['primario']);
     return($analisis['secundario']);
   }
 
@@ -94,7 +158,7 @@ class iCompactador {
     // replace: _name -> _0, double-underscore (__name) is ignored
     $regexp = '/\\b_[A-Za-z\\d]\\w*/';
     // build the word list
-    $keywords = $this->_analyze($script, $regexp, '_encodePrivate');
+    $keywords = $this->Analizar($script, $regexp, '_encodePrivate');
     // quick ref
     $encoded = $keywords['encoded'];
 
@@ -116,7 +180,7 @@ class iCompactador {
     // for high-ascii, don't encode single character low-ascii
     $regexp = ($this->codificacion > 62) ? '/\\w\\w+/' : '/\\w+/';
     // build the word list
-    $keywords = $this->_analyze($script, $regexp, $encode);
+    $keywords = $this->Analizar($script, $regexp, $encode);
     $encoded = $keywords['encoded'];
 
     // encode
@@ -134,82 +198,6 @@ class iCompactador {
       return $this->_bootStrap($analizador->exec($script), $keywords);
     }
   }
-
-  private function _analyze($script, $regexp, $encode) {
-    // analyse
-    // retreive all words in the script
-    $all = array();
-    preg_match_all($regexp, $script, $all);
-    $_sorted = array(); // list of words sorted by frequency
-    $_encoded = array(); // dictionary of word->encoding
-    $_protected = array(); // instances of "protected" words
-    $all = $all[0]; // simulate the javascript comportement of global match
-    if (!empty($all)) {
-      $unsorted = array(); // same list, not sorted
-      $protected = array(); // "protected" words (dictionary of word->"word")
-      $value = array(); // dictionary of charCode->encoding (eg. 256->ff)
-      $this->conteo = array(); // word->count
-      $i = count($all);
-      $j = 0; //$word = null;
-      // count the occurrences - used for sorting later
-      do {
-        --$i;
-        $word = '$' . $all[$i];
-        if (!isset($this->conteo[$word])) {
-          $this->conteo[$word] = 0;
-          $unsorted[$j] = $word;
-          // make a dictionary of all of the protected words in this script
-          //  these are words that might be mistaken for encoding
-          //if (is_string($encode) && method_exists($this, $encode))
-          $values[$j] = call_user_func(array(&$this, $encode), $j);
-          $protected['$' . $values[$j]] = $j++;
-        }
-        // increment the word counter
-        $this->conteo[$word] ++;
-      } while ($i > 0);
-      // prepare to sort the word list, first we must protect
-      //  words that are also used as codes. we assign them a code
-      //  equivalent to the word itself.
-      // e.g. if "do" falls within our encoding range
-      //      then we store keywords["do"] = "do";
-      // this avoids problems when decoding
-      $i = count($unsorted);
-      do {
-        $word = $unsorted[--$i];
-        if (isset($protected[$word]) /* != null */) {
-          $_sorted[$protected[$word]] = substr($word, 1);
-          $_protected[$protected[$word]] = true;
-          $this->conteo[$word] = 0;
-        }
-      } while ($i);
-
-      // sort the words by frequency
-      // Note: the javascript and php version of sort can be different :
-      // in php manual, usort :
-      // " If two members compare as equal,
-      // their order in the sorted array is undefined."
-      // so the final packed script is different of the Dean's javascript version
-      // but equivalent.
-      // the ECMAscript standard does not guarantee this behaviour,
-      // and thus not all browsers (e.g. Mozilla versions dating back to at
-      // least 2003) respect this. 
-      usort($unsorted, array(&$this, '_sortWords'));
-      $j = 0;
-      // because there are "protected" words in the list
-      //  we must add the sorted words around them
-      do {
-        if (!isset($_sorted[$i]))
-          $_sorted[$i] = substr($unsorted[$j++], 1);
-        $_encoded[$_sorted[$i]] = $values[$i];
-      } while (++$i < count($unsorted));
-    }
-    return array(
-        'sorted' => $_sorted,
-        'encoded' => $_encoded,
-        'protected' => $_protected);
-  }
-
-
 
   private function _sortWords($match1, $match2) {
     return $this->conteo[$match2] - $this->conteo[$match1];
@@ -294,8 +282,6 @@ class iCompactador {
     // the whole thing
     return 'eval(' . $unpack . '(' . $params . "))\n";
   }
-
- 
 
   private function _insertFastDecode($match) {
     return '{' . $this->regulador . ';';
@@ -410,7 +396,6 @@ class iCompactador {
   const JSFUNCTION_decodeBody = //_decode = function() {
 // does the browser support String.replace where the
 //  replacement value is a function?
-
           '    if (!\'\'.replace(/^/, String)) {
         // decode all the values we need
         while ($count--) {
