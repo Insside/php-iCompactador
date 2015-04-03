@@ -8,7 +8,21 @@ if (!class_exists('iAnalisis')) {
 }
 
 /**
- * 
+ *  php-iCompactador - A JavaScript Obfuscator written in PHP.
+ *  Copyright © Insside® Corp. All rights reserved.
+ *  Unauthorized duplication and modification prohibited.
+ *
+ *  END-USER LICENSE AND AGREEMENT
+ *  THIS SOFTWARE  IS PROVIDED  BY "INSSIDE CORP." ``AS IS'' AND  ANY EXPRESS  OR
+ *  IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED  TO, THE IMPLIED WARRANTIES
+ *  OF MERCHANTABILITY  AND FITNESS FOR  A PARTICULAR PURPOSE  ARE DISCLAIMED.
+ *  IN  NO  EVENT  SHALL  "COMRAX LTD"  BE  LIABLE FOR  ANY  DIRECT, INDIRECT,
+ *  INCIDENTAL, SPECIAL, EXEMPLARY,  OR CONSEQUENTIAL DAMAGES (INCLUDING,  BUT
+ *  NOT LIMITED  TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ *  DATA,  OR PROFITS; OR BUSINESS INTERRUPTION)  HOWEVER CAUSED  AND true ANY
+ *  THEORY  OF  LIABILITY,  WHETHER  IN  CONTRACT, STRICT  LIABILITY, OR  TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING  IN ANY WAY OUT  OF THE USE OF
+ *  THIS  SOFTWARE,  EVEN  IF ADVISED  OF  THE  POSSIBILITY  OF  SUCH  DAMAGE.
  */
 class iCompactador {
   /**
@@ -37,6 +51,11 @@ class iCompactador {
     $this->especiales = $especiales;
   }
 
+  /**
+   * Ejecuta la compactasión del codigo segun los diferentes parametros y metodos establecidos
+   * para el desarrollo de dicha acción.
+   * @return string que contiene la versión compacta del JavaScript procesado.
+   */
   public function Compactar() {
     $this->set_Analizador('Compresion');
     if ($this->especiales) {
@@ -152,14 +171,14 @@ class iCompactador {
 
   private function _encodeSpecialChars($script) {
     $analizador = new iAnalisis();
-    // replace: $name -> n, $$name -> na
+// replace: $name -> n, $$name -> na
     $analizador->add('/((\\x24+)([a-zA-Z$_]+))(\\d*)/', array('fn' => '_replace_name')
     );
-    // replace: _name -> _0, double-underscore (__name) is ignored
+// replace: _name -> _0, double-underscore (__name) is ignored
     $regexp = '/\\b_[A-Za-z\\d]\\w*/';
-    // build the word list
+// build the word list
     $keywords = $this->Analizar($script, $regexp, '_encodePrivate');
-    // quick ref
+// quick ref
     $encoded = $keywords['encoded'];
 
     $analizador->add($regexp, array(
@@ -171,19 +190,19 @@ class iCompactador {
   }
 
   private function _encodeKeywords($script) {
-    // escape high-ascii values already in the script (i.e. in strings)
+// escape high-ascii values already in the script (i.e. in strings)
     if ($this->codificacion > 62)
       $script = $this->_escape95($script);
-    // create the analizador
+// create the analizador
     $analizador = new iAnalisis();
     $encode = $this->_getEncoder($this->codificacion);
-    // for high-ascii, don't encode single character low-ascii
+// for high-ascii, don't encode single character low-ascii
     $regexp = ($this->codificacion > 62) ? '/\\w\\w+/' : '/\\w+/';
-    // build the word list
+// build the word list
     $keywords = $this->Analizar($script, $regexp, $encode);
     $encoded = $keywords['encoded'];
 
-    // encode
+// encode
     $analizador->add($regexp, array(
         'fn' => '_replace_encoded',
         'data' => $encoded
@@ -192,9 +211,9 @@ class iCompactador {
     if (empty($script))
       return $script;
     else {
-      //$res = $analizador->exec($script);
-      //$res = $this->_bootStrap($res, $keywords);
-      //return $res;
+//$res = $analizador->exec($script);
+//$res = $this->_bootStrap($res, $keywords);
+//return $res;
       return $this->_bootStrap($analizador->exec($script), $keywords);
     }
   }
@@ -203,26 +222,26 @@ class iCompactador {
     return $this->conteo[$match2] - $this->conteo[$match1];
   }
 
-  // build the boot function used for loading and decoding
+// build the boot function used for loading and decoding
   private function _bootStrap($packed, $keywords) {
     $ENCODE = $this->_safeRegExp('$encode\\($count\\)');
 
-    // $packed: the packed script
+// $packed: the packed script
     $packed = "'" . $this->_escape($packed) . "'";
 
-    // $ascii: base for encoding
+// $ascii: base for encoding
     $ascii = min(count($keywords['sorted']), $this->codificacion);
     if ($ascii == 0)
       $ascii = 1;
 
-    // $count: number of words contained in the script
+// $count: number of words contained in the script
     $count = count($keywords['sorted']);
 
-    // $keywords: list of words contained in the script
+// $keywords: list of words contained in the script
     foreach ($keywords['protected'] as $i => $value) {
       $keywords['sorted'][$i] = '';
     }
-    // convert from a string to an array
+// convert from a string to an array
     ksort($keywords['sorted']);
     $keywords = "'" . implode('|', $keywords['sorted']) . "'.split('|')";
 
@@ -232,46 +251,46 @@ class iCompactador {
     $encode = preg_replace('/arguments\\.callee/', '$encode', $encode);
     $inline = '\\$count' . ($ascii > 10 ? '.toString(\\$ascii)' : '');
 
-    // $decode: code snippet to speed up decoding
+// $decode: code snippet to speed up decoding
     if ($this->rapida) {
-      // create the decoder
+// create the decoder
       $decode = $this->_getJSFunction('_decodeBody');
       if ($this->codificacion > 62)
         $decode = preg_replace('/\\\\w/', '[\\xa1-\\xff]', $decode);
-      // perform the encoding inline for lower ascii values
+// perform the encoding inline for lower ascii values
       elseif ($ascii < 36)
         $decode = preg_replace($ENCODE, $inline, $decode);
-      // special case: when $count==0 there are no keywords. I want to keep
-      //  the basic shape of the unpacking funcion so i'll frig the code...
+// special case: when $count==0 there are no keywords. I want to keep
+//  the basic shape of the unpacking funcion so i'll frig the code...
       if ($count == 0)
         $decode = preg_replace($this->_safeRegExp('($count)\\s*=\\s*1'), '$1=0', $decode, 1);
     }
 
-    // boot function
+// boot function
     $unpack = $this->_getJSFunction('_unpack');
     if ($this->rapida) {
-      // insert the decoder
+// insert the decoder
       $this->regulador = $decode;
       $unpack = preg_replace_callback('/\\{/', array(&$this, '_insertFastDecode'), $unpack, 1);
     }
     $unpack = preg_replace('/"/', "'", $unpack);
     if ($this->codificacion > 62) { // high-ascii
-      // get rid of the word-boundaries for regexp matches
+// get rid of the word-boundaries for regexp matches
       $unpack = preg_replace('/\'\\\\\\\\b\'\s*\\+|\\+\s*\'\\\\\\\\b\'/', '', $unpack);
     }
     if ($ascii > 36 || $this->codificacion > 62 || $this->rapida) {
-      // insert the encode function
+// insert the encode function
       $this->regulador = $encode;
       $unpack = preg_replace_callback('/\\{/', array(&$this, '_insertFastEncode'), $unpack, 1);
     } else {
-      // perform the encoding inline
+// perform the encoding inline
       $unpack = preg_replace($ENCODE, $inline, $unpack);
     }
-    // pack the boot function too
+// pack the boot function too
     $unpackPacker = new iCompactador($unpack, 0, false, true);
     $unpack = $unpackPacker->Compactar();
 
-    // arguments
+// arguments
     $params = array($packed, $ascii, $count, $keywords);
     if ($this->rapida) {
       $params[] = 0;
@@ -279,7 +298,7 @@ class iCompactador {
     }
     $params = implode(',', $params);
 
-    // the whole thing
+// the whole thing
     return 'eval(' . $unpack . '(' . $params . "))\n";
   }
 
@@ -291,25 +310,25 @@ class iCompactador {
     return '{$encode=' . $this->regulador . ';';
   }
 
-  // mmm.. ..which one do i need ??
+// mmm.. ..which one do i need ??
   private function _getEncoder($ascii) {
     return $ascii > 10 ? $ascii > 36 ? $ascii > 62 ? '_encode95' : '_encode62' : '_encode36' : '_encode10';
   }
 
-  // zero encoding
-  // characters: 0123456789
+// zero encoding
+// characters: 0123456789
   private function _encode10($charCode) {
     return $charCode;
   }
 
-  // inherent base36 support
-  // characters: 0123456789abcdefghijklmnopqrstuvwxyz
+// inherent base36 support
+// characters: 0123456789abcdefghijklmnopqrstuvwxyz
   private function _encode36($charCode) {
     return base_convert($charCode, 10, 36);
   }
 
-  // hitch a ride on base36 and add the upper case alpha characters
-  // characters: 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
+// hitch a ride on base36 and add the upper case alpha characters
+// characters: 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
   private function _encode62($charCode) {
     $res = '';
     if ($charCode >= $this->codificacion) {
@@ -323,8 +342,8 @@ class iCompactador {
       return $res . base_convert($charCode, 10, 36);
   }
 
-  // use high-ascii values
-  // characters: ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþ
+// use high-ascii values
+// characters: ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþ
   private function _encode95($charCode) {
     $res = '';
     if ($charCode >= $this->codificacion)
@@ -341,12 +360,12 @@ class iCompactador {
     return "_" . $charCode;
   }
 
-  // protect characters used by the analizador
+// protect characters used by the analizador
   private function _escape($script) {
     return preg_replace('/([\\\\\'])/', '\\\$1', $script);
   }
 
-  // protect high-ascii characters already in the script
+// protect high-ascii characters already in the script
   private function _escape95($script) {
     return preg_replace_callback(
             '/[\\xa1-\\xff]/', array(&$this, '_escape95Bis'), $script
@@ -364,17 +383,17 @@ class iCompactador {
       return '';
   }
 
-  // JavaScript Functions used.
-  // Note : In Dean's version, these functions are converted
-  // with 'String(aFunctionName);'.
-  // This internal conversion complete the original code, ex :
-  // 'while (aBool) anAction();' is converted to
-  // 'while (aBool) { anAction(); }'.
-  // The JavaScript functions below are corrected.
-  // unpacking function - this is the boot strap function
-  //  data extracted from this packing routine is passed to
-  //  this function when decoded in the target
-  // NOTE ! : without the ';' final.
+// JavaScript Functions used.
+// Note : In Dean's version, these functions are converted
+// with 'String(aFunctionName);'.
+// This internal conversion complete the original code, ex :
+// 'while (aBool) anAction();' is converted to
+// 'while (aBool) { anAction(); }'.
+// The JavaScript functions below are corrected.
+// unpacking function - this is the boot strap function
+//  data extracted from this packing routine is passed to
+//  this function when decoded in the target
+// NOTE ! : without the ';' final.
   const JSFUNCTION_unpack = 'function($packed, $ascii, $count, $keywords, $encode, $decode) {
     while ($count--) {
         if ($keywords[$count]) {
@@ -391,7 +410,7 @@ class iCompactador {
     return $packed;
     }';
    */
-  // code-snippet inserted into the unpacker to speed up decoding
+// code-snippet inserted into the unpacker to speed up decoding
   const JSFUNCTION_decodeBody = //_decode = function() {
 // does the browser support String.replace where the
 //  replacement value is a function?
@@ -422,24 +441,24 @@ class iCompactador {
     }';
    */
 
-  // zero encoding
-  // characters: 0123456789
+// zero encoding
+// characters: 0123456789
   const JSFUNCTION_encode10 = 'function($charCode) {
     return $charCode;
 }'; //;';
-  // inherent base36 support
-  // characters: 0123456789abcdefghijklmnopqrstuvwxyz
+// inherent base36 support
+// characters: 0123456789abcdefghijklmnopqrstuvwxyz
   const JSFUNCTION_encode36 = 'function($charCode) {
     return $charCode.toString(36);
 }'; //;';
-  // hitch a ride on base36 and add the upper case alpha characters
-  // characters: 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
+// hitch a ride on base36 and add the upper case alpha characters
+// characters: 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
   const JSFUNCTION_encode62 = 'function($charCode) {
     return ($charCode < codificacion ? \'\' : arguments.callee(parseInt($charCode / codificacion))) +
     (($charCode = $charCode % codificacion) > 35 ? String.fromCharCode($charCode + 29) : $charCode.toString(36));
 }';
-  // use high-ascii values
-  // characters: ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþ
+// use high-ascii values
+// characters: ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþ
   const JSFUNCTION_encode95 = 'function($charCode) {
     return ($charCode < codificacion ? \'\' : arguments.callee($charCode / codificacion)) +
         String.fromCharCode($charCode % codificacion + 161);
